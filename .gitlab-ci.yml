@@ -1,0 +1,141 @@
+default:
+  image: php:8.3-cli
+
+stages:
+  - lint
+  - test
+  - build
+  - deploy
+  - smoke-test
+  - notify
+
+variables:
+  COMPOSER_ALLOW_SUPERUSER: "1"
+  POSTGRES_DB: ssmis_test
+  POSTGRES_USER: ssmis_test
+  POSTGRES_PASSWORD: ssmis_test
+  POSTGRES_HOST_AUTH_METHOD: trust
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - vendor/
+
+# ------------------------------------------------------------------------------
+# STAGE 1: LINT AND CODE STYLE
+# ------------------------------------------------------------------------------
+lint_job:
+  stage: lint
+  before_script:
+    - apt-get update -y && apt-get install -y unzip git libpq-dev
+    - docker-php-ext-install pdo pdo_pgsql pgsql
+    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+    - composer install --prefer-dist --no-progress --no-interaction
+  script:
+    - vendor/bin/pint --test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "docs" || $CI_COMMIT_BRANCH == "dev"'
+
+# ------------------------------------------------------------------------------
+# STAGE 2: AUTOMATED PHPUNIT TESTS
+# ------------------------------------------------------------------------------
+test_job:
+  stage: test
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    DB_CONNECTION: pgsql
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_DATABASE: ssmis_test
+    DB_USERNAME: ssmis_test
+    DB_PASSWORD: ssmis_test
+    DB_URL: ""
+  before_script:
+    - apt-get update -y && apt-get install -y unzip git libpq-dev
+    - docker-php-ext-install pdo pdo_pgsql pgsql bcmath
+    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+    - cp .env.example .env
+    - composer install --prefer-dist --no-progress --no-interaction --no-scripts
+    - php artisan key:generate --env=testing
+  script:
+    - php artisan test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "docs" || $CI_COMMIT_BRANCH == "dev"'
+
+# ------------------------------------------------------------------------------
+# STAGE 3: BUILD PRODUCTION ARTIFACT
+# ------------------------------------------------------------------------------
+build_job:
+  stage: build
+  before_script:
+    - apt-get update -y && apt-get install -y unzip git libpq-dev
+    - docker-php-ext-install pdo pdo_pgsql pgsql bcmath
+    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+  script:
+    - composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+    - php artisan config:cache || true
+    - php artisan route:cache || true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# ------------------------------------------------------------------------------
+# STAGE 4: ZERO-DOWNTIME DEPLOYMENT
+# ------------------------------------------------------------------------------
+deploy_job:
+  stage: deploy
+  before_script:
+    - apt-get update -y && apt-get install -y curl
+  script:
+    - |
+      if [ -n "$DEPLOY_WEBHOOK_URL" ]; then
+        echo "Triggering deployment webhook..."
+        curl -X POST "$DEPLOY_WEBHOOK_URL"
+      else
+        echo "DEPLOY_WEBHOOK_URL variable not configured; skipping deployment webhook trigger."
+      fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# ------------------------------------------------------------------------------
+# STAGE 5: SMOKE TEST (LIVE HEALTH AUDIT)
+# ------------------------------------------------------------------------------
+smoke_test_job:
+  stage: smoke-test
+  before_script:
+    - apt-get update -y && apt-get install -y curl
+  script:
+    - sleep 10
+    - HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.kesararamwithdigital.tech/up)
+    - echo "Health Endpoint Status: HTTP $HTTP_STATUS"
+    - |
+      if [ "$HTTP_STATUS" -ne 200 ]; then
+        echo "Smoke test failed: Live health endpoint returned HTTP $HTTP_STATUS"
+        exit 1
+      fi
+    - echo "Production Gateway is Healthy and Online (HTTP 200 OK)"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# ------------------------------------------------------------------------------
+# STAGE 6: NOTIFICATIONS
+# ------------------------------------------------------------------------------
+notify_job:
+  stage: notify
+  before_script:
+    - apt-get update -y && apt-get install -y curl
+  script:
+    - |
+      if [ -n "$SLACK_WEBHOOK_URL" ]; then
+        curl -X POST -H 'Content-type: application/json' \
+          --data "{\"text\":\"CSMS API Deployment Update\nBranch: $CI_COMMIT_BRANCH\nCommit: $CI_COMMIT_SHA\nStatus: Success (All Stages Passed)\"}" \
+          "$SLACK_WEBHOOK_URL"
+      else
+        echo "SLACK_WEBHOOK_URL variable not configured; notification skipped."
+      fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always

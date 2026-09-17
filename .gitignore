@@ -14,16 +14,6 @@ LOCAL_CREDENTIALS.md
 *.dump.sql
 *dump*.sql
 *backup*.sql
-tests/Feature/AdminPersistenceAndRbacCrudTest.php
-
-# Postman, API Collections & Client Environments
-/postman_collections/
-postman_collections/
-*hoppscotch*
-
-# Delivery & Staging Credentials
-/API-Delivery-Package/test_credentials.md
-Staging & Local Test Credentials Directory
 
 # PHP & Composer Dependencies
 /vendor
@@ -35,7 +25,7 @@ Staging & Local Test Credentials Directory
 /public/storage
 /public/fonts-manifest.dev.json
 
-# Logs, Cache & Temporary Files
+# Logs & Temporary Cache
 *.log
 *-debug.log
 /storage/*.key
@@ -43,24 +33,8 @@ Staging & Local Test Credentials Directory
 .phpunit.result.cache
 /.phpunit.cache
 .phpactor.json
-*.py
 
-# Databases & SQLite
-*.sqlite
-*.sqlite-journal
-database/*.sqlite
-database/*.sqlite-journal
-.dataconnect/
-firebase.json
-
-# Local Assets & Scripts
-/items/
-items/
-extracted_urls.txt
-.firebaserc
-*firebase*
-
-# macOS / Windows# OS Generated Files
+# macOS / Windows OS Generated Files
 .DS_Store
 .DS_Store?
 ._*
@@ -68,10 +42,6 @@ extracted_urls.txt
 .Trashes
 ehthumbs.db
 Thumbs.db
-
-# Raw Media Assets (Managed in Cloudinary CDN)
-KHMERIEL/
-Desktop.ini
 
 # Vercel & Cloud Deployments
 .vercel
@@ -84,12 +54,3 @@ Desktop.ini
 /.nova
 /.zed
 _ide_helper.php
-# Local Image & Asset Catalogs (Served via Cloudinary CDN)
-/khmeriel_catalog/
-/khmerieliterm/
-/khmeRiel-Items/
-/TOTEME*
-/product-items/
-/lvm/
-
-.env*
